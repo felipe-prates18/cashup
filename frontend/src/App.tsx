@@ -44,6 +44,12 @@ export default function App() {
   const [titles, setTitles] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [summary, setSummary] = useState<any | null>(null)
+  const [showProfile, setShowProfile] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  })
   const [accountForm, setAccountForm] = useState({
     name: '',
     account_type: 'Conta Corrente',
@@ -177,6 +183,30 @@ export default function App() {
     setTitles([])
     setUsers([])
     window.localStorage.removeItem('cashup-token')
+  }
+
+  const handleChangePassword = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setFormMessage('')
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setFormMessage('A confirmação da senha não confere.')
+      return
+    }
+    try {
+      await apiFetch('/auth/change-password', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          current_password: passwordForm.current_password,
+          new_password: passwordForm.new_password
+        })
+      })
+      setPasswordForm({ current_password: '', new_password: '', confirm_password: '' })
+      setFormMessage('Senha atualizada com sucesso!')
+      setShowProfile(false)
+    } catch (error) {
+      setFormMessage('Não foi possível atualizar a senha.')
+    }
   }
 
   const handleCreateAccount = async (event: React.FormEvent) => {
@@ -372,6 +402,10 @@ export default function App() {
           {user && <span className="badge">{user.name} · {user.role}</span>}
         </div>
         <div className="header-actions">
+          <button className="ghost profile-button" onClick={() => setShowProfile(true)}>
+            <span aria-hidden="true">👤</span>
+            Perfil
+          </button>
           <button className="ghost" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
             {theme === 'light' ? 'Modo escuro' : 'Modo claro'}
           </button>
@@ -393,6 +427,56 @@ export default function App() {
       </nav>
       <main>
         {formMessage && <p className="form-message">{formMessage}</p>}
+        {showProfile && (
+          <div className="modal-backdrop" role="dialog" aria-modal="true">
+            <div className="modal-card">
+              <div className="modal-header">
+                <h2>Alterar senha</h2>
+                <button className="ghost" onClick={() => setShowProfile(false)}>
+                  Fechar
+                </button>
+              </div>
+              <form onSubmit={handleChangePassword} className="form-grid">
+                <label className="field">
+                  Senha atual
+                  <input
+                    type="password"
+                    value={passwordForm.current_password}
+                    onChange={(event) =>
+                      setPasswordForm({ ...passwordForm, current_password: event.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <label className="field">
+                  Nova senha
+                  <input
+                    type="password"
+                    value={passwordForm.new_password}
+                    onChange={(event) =>
+                      setPasswordForm({ ...passwordForm, new_password: event.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <label className="field">
+                  Confirmar nova senha
+                  <input
+                    type="password"
+                    value={passwordForm.confirm_password}
+                    onChange={(event) =>
+                      setPasswordForm({ ...passwordForm, confirm_password: event.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <button type="submit" className="primary">
+                  Atualizar senha
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
         {active === 'Dashboard' && (
           <div className="grid">
             <SectionCard title="Resumo do Caixa">
