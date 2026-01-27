@@ -190,6 +190,62 @@ textarea {
   font-weight: 600;
 }
 
+.secondary {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid #2563eb;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font-weight: 600;
+  align-self: flex-end;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0 16px;
+  align-items: flex-end;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 14px;
+}
+
+.table th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.value-negative {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+body[data-theme='dark'] .table th {
+  background: #0b1120;
+}
+
+body[data-theme='dark'] .table td,
+body[data-theme='dark'] .table th {
+  border-bottom-color: #1f2937;
+}
+
 .ghost {
   padding: 8px 14px;
   border-radius: 999px;
