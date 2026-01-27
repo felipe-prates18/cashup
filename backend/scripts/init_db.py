@@ -1,4 +1,10 @@
+from pathlib import Path
+import sys
+
 from sqlalchemy.orm import Session
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT))
 
 from app.auth import get_password_hash
 from app.database import Base, SessionLocal, engine
