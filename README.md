@@ -160,7 +160,7 @@ Após o build, o backend irá servir o frontend em `http://localhost:9020`.
 
 ## Deploy Automatizado (Ubuntu 24.04)
 
-Execute o script:
+Execute o script (com o repositório em `/opt/cashup`):
 
 ```bash
 sudo bash deploy/setup.sh
