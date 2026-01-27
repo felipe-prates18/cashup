@@ -1,7 +1,7 @@
 :root {
   font-family: 'Inter', system-ui, sans-serif;
   color: #0f172a;
-  background-color: #f8fafc;
+  background-color: #e2e8f0;
 }
 
 * {
@@ -10,6 +10,43 @@
 
 body {
   margin: 0;
+  background: #e2e8f0;
+  color: inherit;
+}
+
+body[data-theme='dark'] {
+  background: #0b1120;
+  color: #e2e8f0;
+}
+
+body[data-theme='dark'] header,
+body[data-theme='dark'] nav,
+body[data-theme='dark'] .card,
+body[data-theme='dark'] .login-card {
+  background: #111827;
+  border-color: #1f2937;
+}
+
+body[data-theme='dark'] nav button {
+  background: #1f2937;
+  color: #e2e8f0;
+}
+
+body[data-theme='dark'] nav button.active {
+  background: #38bdf8;
+  color: #0b1120;
+}
+
+body[data-theme='dark'] input,
+body[data-theme='dark'] select,
+body[data-theme='dark'] textarea {
+  background: #0b1120;
+  color: #e2e8f0;
+  border-color: #334155;
+}
+
+body[data-theme='dark'] pre {
+  background: #0b1120;
 }
 
 .app {
@@ -37,17 +74,29 @@ header p {
   color: #64748b;
 }
 
-.token {
+.header-actions {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 280px;
+  gap: 12px;
+  align-items: center;
 }
 
-.token input {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #cbd5f5;
+.profile-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge {
+  display: inline-flex;
+  margin-top: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  font-size: 12px;
+}
+
+body[data-theme='dark'] .badge {
+  background: #1f2937;
 }
 
 nav {
@@ -93,12 +142,129 @@ main {
   margin-top: 0;
 }
 
+.form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.field.full {
+  grid-column: 1 / -1;
+}
+
+.field.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+input,
+select,
+textarea {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  font-size: 14px;
+}
+
+textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.primary {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ghost {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #cbd5f5;
+  background: transparent;
+  cursor: pointer;
+}
+
+.form-message {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+
+.form-message.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 pre {
   background: #0f172a;
   color: #e2e8f0;
   padding: 12px;
   border-radius: 12px;
   overflow-x: auto;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 10;
+}
+
+.modal-card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: min(520px, 100%);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+}
+
+body[data-theme='dark'] .modal-card {
+  background: #111827;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  background: white;
+  padding: 32px;
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.15);
+  display: grid;
+  gap: 24px;
 }
 
 @media (max-width: 768px) {
@@ -108,7 +274,9 @@ pre {
     gap: 16px;
   }
 
-  .token {
+  .header-actions {
     width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }

@@ -47,3 +47,4 @@ systemctl enable cashup.service
 systemctl restart cashup.service
 
 echo "CashUp disponível em http://localhost:9020"
+echo "Usuário inicial: admin@cashup.local / admin"
