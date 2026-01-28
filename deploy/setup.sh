@@ -37,6 +37,8 @@ WorkingDirectory=$PROJECT_ROOT/backend
 Environment=PATH=$PROJECT_ROOT/backend/.venv/bin
 ExecStart=$PROJECT_ROOT/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9020
 Restart=always
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -47,3 +49,4 @@ systemctl enable cashup.service
 systemctl restart cashup.service
 
 echo "CashUp disponível em http://localhost:9020"
+echo "Usuário inicial: admin@cashup.local / admin"
