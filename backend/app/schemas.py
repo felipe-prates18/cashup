@@ -151,6 +151,11 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class ActionLogOut(BaseModel):
     id: int
     action: str
