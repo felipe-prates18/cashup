@@ -36,6 +36,12 @@ const formatCurrency = (value: number) =>
 
 const parseDateValue = (value?: string) => (value ? new Date(`${value}T00:00:00`) : null)
 
+const parseNumberValue = (value: string) => {
+  const normalized = value.replace(/\./g, '').replace(',', '.')
+  const parsed = Number(normalized)
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
 export default function App() {
   const [active, setActive] = useState<Section>('Dashboard')
   const [token, setToken] = useState('')
@@ -291,13 +297,13 @@ export default function App() {
     event.preventDefault()
     setFormMessage('')
     try {
-      await apiFetch('/accounts', {
+          await apiFetch('/accounts', {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
           name: accountForm.name,
           account_type: accountForm.account_type,
-          initial_balance: Number(accountForm.initial_balance || 0),
+          initial_balance: parseNumberValue(accountForm.initial_balance || '0'),
           is_active: accountForm.is_active,
           bank_id: accountForm.bank_id ? Number(accountForm.bank_id) : null
         })
@@ -341,13 +347,13 @@ export default function App() {
     event.preventDefault()
     setFormMessage('')
     try {
-      await apiFetch('/transactions', {
+          await apiFetch('/transactions', {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
           transaction_type: transactionForm.transaction_type,
           date: transactionForm.date,
-          value: Number(transactionForm.value || 0),
+          value: parseNumberValue(transactionForm.value || '0'),
           category_id: Number(transactionForm.category_id),
           account_id: Number(transactionForm.account_id),
           payment_method: transactionForm.payment_method,
@@ -386,14 +392,14 @@ export default function App() {
     event.preventDefault()
     setFormMessage('')
     try {
-      await apiFetch('/titles', {
+          await apiFetch('/titles', {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
           title_type: titleForm.title_type,
           client_supplier: titleForm.client_supplier,
           due_date: titleForm.due_date,
-          value: Number(titleForm.value || 0),
+          value: parseNumberValue(titleForm.value || '0'),
           status: titleForm.status,
           account_id: titleForm.account_id ? Number(titleForm.account_id) : null,
           payment_method: titleForm.payment_method || null,
