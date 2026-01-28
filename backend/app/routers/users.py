@@ -1,10 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..auth import create_access_token, get_password_hash, require_role, authenticate_user
+from ..auth import (
+    authenticate_user,
+    create_access_token,
+    get_current_user,
+    get_password_hash,
+    require_role,
+    verify_password,
+)
 from ..database import get_db
 from ..models import ActionLog, User
-from ..schemas import LoginRequest, TokenResponse, UserCreate, UserOut
+from ..schemas import ChangePasswordRequest, LoginRequest, TokenResponse, UserCreate, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["Usuários"])
 
@@ -42,3 +49,18 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), user=Depends
 @router.get("/users", response_model=list[UserOut])
 def list_users(db: Session = Depends(get_db), user=Depends(require_role("admin"))):
     return db.query(User).all()
+
+
+@router.get("/me", response_model=UserOut)
+def read_me(user=Depends(get_current_user)):
+    return user
+
+
+@router.post("/change-password")
+def change_password(payload: ChangePasswordRequest, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Invalid current password")
+    user.password_hash = get_password_hash(payload.new_password)
+    db.add(user)
+    db.commit()
+    return {"status": "ok"}

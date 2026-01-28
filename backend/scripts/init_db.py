@@ -14,14 +14,20 @@ from app.models import Account, Bank, Category, User
 def main() -> None:
     Base.metadata.create_all(bind=engine)
     db: Session = SessionLocal()
-    if not db.query(User).filter(User.email == "admin@cashup.local").first():
+    admin = db.query(User).filter(User.email == "admin@cashup.local").first()
+    if not admin:
         admin = User(
             name="Admin",
             email="admin@cashup.local",
             role="admin",
-            password_hash=get_password_hash("admin123"),
+            password_hash=get_password_hash("admin"),
         )
         db.add(admin)
+    else:
+        admin.name = "Admin"
+        admin.role = "admin"
+        admin.is_active = True
+        admin.password_hash = get_password_hash("admin")
     if not db.query(Category).first():
         db.add(Category(name="Receitas Gerais", category_type="Receita"))
         db.add(Category(name="Despesas Gerais", category_type="Despesa"))
