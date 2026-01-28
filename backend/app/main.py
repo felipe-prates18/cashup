@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 from .database import Base, engine
 from .routers import accounts, cashflow, categories, reconciliation, reports, titles, transactions, users
@@ -26,10 +27,21 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 
 
+def _sanitize_errors(value):
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, list):
+        return [_sanitize_errors(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_errors(item) for key, item in value.items()}
+    return value
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.warning("Validation error on %s %s: %s", request.method, request.url.path, exc.errors())
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    sanitized = _sanitize_errors(exc.errors())
+    logger.warning("Validation error on %s %s: %s", request.method, request.url.path, sanitized)
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(sanitized)})
 
 
 @app.exception_handler(Exception)
