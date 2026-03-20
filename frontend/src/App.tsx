@@ -59,6 +59,38 @@ const parseApiErrorMessage = (error: unknown, fallback: string) => {
   return error.message || fallback
 }
 
+const decodeTokenPayload = (token: string): Record<string, unknown> | null => {
+  try {
+    const [, payload] = token.split('.')
+    if (!payload) {
+      return null
+    }
+
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+    return JSON.parse(window.atob(padded)) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+const getSessionResetDelay = (token: string) => {
+  const payload = decodeTokenPayload(token)
+  const sessionResetAt = payload?.session_reset_at
+
+  if (typeof sessionResetAt === 'string') {
+    const resetAt = new Date(sessionResetAt)
+    const delay = resetAt.getTime() - Date.now()
+    if (delay > 0) {
+      return delay
+    }
+  }
+
+  const nextMidnight = new Date()
+  nextMidnight.setHours(24, 0, 0, 0)
+  return Math.max(nextMidnight.getTime() - Date.now(), 0)
+}
+
 export default function App() {
   const [active, setActive] = useState<Section>('Dashboard')
   const [token, setToken] = useState('')
@@ -152,6 +184,23 @@ export default function App() {
     window.localStorage.setItem('cashup-theme', theme)
   }, [theme])
 
+  const handleLogout = (message?: string) => {
+    setToken('')
+    setUser(null)
+    setSummary(null)
+    setAccounts([])
+    setCategories([])
+    setTransactions([])
+    setTitles([])
+    setUsers([])
+    setImportedPdfTransactions([])
+    setReconciliationMessage('')
+    window.localStorage.removeItem('cashup-token')
+    if (message) {
+      setAuthError(message)
+    }
+  }
+
   useEffect(() => {
     if (!token) {
       setUser(null)
@@ -159,8 +208,23 @@ export default function App() {
     }
     window.localStorage.setItem('cashup-token', token)
     apiFetch<User>('/auth/me', { headers: authHeaders })
-      .then(setUser)
-      .catch(() => setUser(null))
+      .then((currentUser) => {
+        setUser(currentUser)
+        setAuthError('')
+      })
+      .catch(() => handleLogout('Sua sessão expirou. Faça login novamente.'))
+  }, [token])
+
+  useEffect(() => {
+    if (!token) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      handleLogout('Sua sessão foi encerrada na virada do dia. Faça login novamente.')
+    }, getSessionResetDelay(token))
+
+    return () => window.clearTimeout(timeoutId)
   }, [token])
 
   useEffect(() => {
@@ -320,20 +384,6 @@ export default function App() {
     } catch (error) {
       setAuthError('Não foi possível autenticar. Verifique email e senha.')
     }
-  }
-
-  const handleLogout = () => {
-    setToken('')
-    setUser(null)
-    setSummary(null)
-    setAccounts([])
-    setCategories([])
-    setTransactions([])
-    setTitles([])
-    setUsers([])
-    setImportedPdfTransactions([])
-    setReconciliationMessage('')
-    window.localStorage.removeItem('cashup-token')
   }
 
   const handleChangePassword = async (event: React.FormEvent) => {
