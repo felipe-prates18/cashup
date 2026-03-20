@@ -182,6 +182,46 @@ export default function App() {
     }
   }, [user?.role])
 
+  const sortedTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  }, [transactions])
+
+  const filteredTransactions = useMemo(() => {
+    const start = parseDateValue(transactionRange.start)
+    const end = parseDateValue(transactionRange.end)
+    return sortedTransactions.filter((transaction) => {
+      const date = parseDateValue(transaction.date)
+      if (!date) return false
+      if (start && date < start) return false
+      if (end && date > end) return false
+      return true
+    })
+  }, [sortedTransactions, transactionRange])
+
+  const filteredReportTransactions = useMemo(() => {
+    const start = parseDateValue(reportRange.start)
+    const end = parseDateValue(reportRange.end)
+    return sortedTransactions.filter((transaction) => {
+      const date = parseDateValue(transaction.date)
+      if (!date) return false
+      if (start && date < start) return false
+      if (end && date > end) return false
+      return true
+    })
+  }, [sortedTransactions, reportRange])
+
+  const activeAccounts = useMemo(() => {
+    return accounts.filter((account) => account.is_active)
+  }, [accounts])
+
+  const incomeCategories = useMemo(() => {
+    return categories.filter((category) => category.category_type === 'Receita')
+  }, [categories])
+
+  const expenseCategories = useMemo(() => {
+    return categories.filter((category) => category.category_type === 'Despesa')
+  }, [categories])
+
   useEffect(() => {
     if (!reconciliationForm.account_id && activeAccounts.length) {
       const firstActiveAccount = activeAccounts[0]
@@ -220,33 +260,6 @@ export default function App() {
     }
   }, [availableSections, active])
 
-  const sortedTransactions = useMemo(() => {
-    return [...transactions].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-  }, [transactions])
-
-  const filteredTransactions = useMemo(() => {
-    const start = parseDateValue(transactionRange.start)
-    const end = parseDateValue(transactionRange.end)
-    return sortedTransactions.filter((transaction) => {
-      const date = parseDateValue(transaction.date)
-      if (!date) return false
-      if (start && date < start) return false
-      if (end && date > end) return false
-      return true
-    })
-  }, [sortedTransactions, transactionRange])
-
-  const filteredReportTransactions = useMemo(() => {
-    const start = parseDateValue(reportRange.start)
-    const end = parseDateValue(reportRange.end)
-    return sortedTransactions.filter((transaction) => {
-      const date = parseDateValue(transaction.date)
-      if (!date) return false
-      if (start && date < start) return false
-      if (end && date > end) return false
-      return true
-    })
-  }, [sortedTransactions, reportRange])
 
   const activeAccounts = useMemo(() => {
     return accounts.filter((account) => account.is_active)
