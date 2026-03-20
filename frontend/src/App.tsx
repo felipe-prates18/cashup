@@ -182,44 +182,6 @@ export default function App() {
     }
   }, [user?.role])
 
-  useEffect(() => {
-    if (!reconciliationForm.account_id && accounts.length) {
-      const firstActiveAccount = accounts.find((account) => account.is_active) || accounts[0]
-      if (firstActiveAccount) {
-        setReconciliationForm((current) => ({
-          ...current,
-          account_id: String(firstActiveAccount.id)
-        }))
-      }
-    }
-  }, [accounts, reconciliationForm.account_id])
-
-  useEffect(() => {
-    const incomeCategory = categories.find((category) => category.category_type === 'Receita')
-    const expenseCategory = categories.find((category) => category.category_type === 'Despesa')
-    setReconciliationForm((current) => ({
-      ...current,
-      income_category_id:
-        current.income_category_id || (incomeCategory ? String(incomeCategory.id) : ''),
-      expense_category_id:
-        current.expense_category_id || (expenseCategory ? String(expenseCategory.id) : '')
-    }))
-  }, [categories])
-
-  const availableSections = useMemo(() => {
-    const adminOnly = new Set<Section>(['Contas', 'Categorias', 'Usuários'])
-    if (user?.role === 'admin') {
-      return sections
-    }
-    return sections.filter((section) => !adminOnly.has(section))
-  }, [user?.role])
-
-  useEffect(() => {
-    if (!availableSections.includes(active)) {
-      setActive(availableSections[0])
-    }
-  }, [availableSections, active])
-
   const sortedTransactions = useMemo(() => {
     return [...transactions].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
   }, [transactions])
@@ -247,6 +209,57 @@ export default function App() {
       return true
     })
   }, [sortedTransactions, reportRange])
+
+  const activeAccounts = useMemo(() => {
+    return accounts.filter((account) => account.is_active)
+  }, [accounts])
+
+  const incomeCategories = useMemo(() => {
+    return categories.filter((category) => category.category_type === 'Receita')
+  }, [categories])
+
+  const expenseCategories = useMemo(() => {
+    return categories.filter((category) => category.category_type === 'Despesa')
+  }, [categories])
+
+  useEffect(() => {
+    if (!reconciliationForm.account_id && activeAccounts.length) {
+      const firstActiveAccount = activeAccounts[0]
+      if (firstActiveAccount) {
+        setReconciliationForm((current) => ({
+          ...current,
+          account_id: String(firstActiveAccount.id)
+        }))
+      }
+    }
+  }, [activeAccounts, reconciliationForm.account_id])
+
+  useEffect(() => {
+    const incomeCategory = incomeCategories[0]
+    const expenseCategory = expenseCategories[0]
+    setReconciliationForm((current) => ({
+      ...current,
+      income_category_id:
+        current.income_category_id || (incomeCategory ? String(incomeCategory.id) : ''),
+      expense_category_id:
+        current.expense_category_id || (expenseCategory ? String(expenseCategory.id) : '')
+    }))
+  }, [incomeCategories, expenseCategories])
+
+  const availableSections = useMemo(() => {
+    const adminOnly = new Set<Section>(['Contas', 'Categorias', 'Usuários'])
+    if (user?.role === 'admin') {
+      return sections
+    }
+    return sections.filter((section) => !adminOnly.has(section))
+  }, [user?.role])
+
+  useEffect(() => {
+    if (!availableSections.includes(active)) {
+      setActive(availableSections[0])
+    }
+  }, [availableSections, active])
+
 
   const transactionBalances = useMemo(() => {
     let running = 0
@@ -991,7 +1004,7 @@ export default function App() {
                   required
                 >
                   <option value="">Selecione</option>
-                  {accounts.map((account) => (
+                  {activeAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
                     </option>
@@ -1178,7 +1191,7 @@ export default function App() {
                   onChange={(event) => setTitleForm({ ...titleForm, account_id: event.target.value })}
                 >
                   <option value="">Selecione</option>
-                  {accounts.map((account) => (
+                  {activeAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
                     </option>
@@ -1256,7 +1269,7 @@ export default function App() {
                   required
                 >
                   <option value="">Selecione</option>
-                  {accounts.map((account) => (
+                  {activeAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
                     </option>
@@ -1276,9 +1289,7 @@ export default function App() {
                   required
                 >
                   <option value="">Selecione</option>
-                  {categories
-                    .filter((category) => category.category_type === 'Receita')
-                    .map((category) => (
+                  {incomeCategories.map((category) => (
                       <option key={category.id} value={category.id}>
                         {category.name}
                       </option>
@@ -1298,9 +1309,7 @@ export default function App() {
                   required
                 >
                   <option value="">Selecione</option>
-                  {categories
-                    .filter((category) => category.category_type === 'Despesa')
-                    .map((category) => (
+                  {expenseCategories.map((category) => (
                       <option key={category.id} value={category.id}>
                         {category.name}
                       </option>

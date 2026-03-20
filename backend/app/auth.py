@@ -60,9 +60,18 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 
+ROLE_LEVELS = {
+    "viewer": 1,
+    "finance": 2,
+    "admin": 3,
+}
+
+
 def require_role(role: str):
     def dependency(user: User = Depends(get_current_user)) -> User:
-        if user.role not in (role, "admin"):
+        required_level = ROLE_LEVELS.get(role)
+        user_level = ROLE_LEVELS.get(user.role, 0)
+        if required_level is None or user_level < required_level:
             raise HTTPException(status_code=403, detail="Forbidden")
         return user
 
