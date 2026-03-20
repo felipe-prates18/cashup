@@ -6,6 +6,7 @@ SERVICE_FILE="/etc/systemd/system/cashup.service"
 BACKEND_DIR=""
 FRONTEND_DIR=""
 SKIP_SYSTEMD=0
+CASHUP_PORT="${CASHUP_PORT:-443}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -111,7 +112,7 @@ After=network.target
 WorkingDirectory=$BACKEND_DIR
 Environment=PATH=$BACKEND_DIR/.venv/bin
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$BACKEND_DIR/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9020
+ExecStart=$BACKEND_DIR/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $CASHUP_PORT
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -127,5 +128,5 @@ systemctl enable cashup.service
 systemctl restart cashup.service
 systemctl --no-pager --full status cashup.service
 
-log "CashUp disponível em http://localhost:9020"
+log "CashUp disponível em http://localhost:$CASHUP_PORT"
 log "Usuário inicial: admin@cashup.local / admin"
