@@ -273,6 +273,22 @@ body[data-theme='dark'] .helper-box {
   cursor: pointer;
 }
 
+.ghost.danger {
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+body[data-theme='dark'] .ghost.danger {
+  border-color: #7f1d1d;
+  color: #fecaca;
+}
+
 .form-message {
   margin: 0 0 16px;
   padding: 8px 12px;
