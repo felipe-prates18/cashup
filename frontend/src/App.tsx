@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from './api'
+import { apiFetch, apiUpload } from './api'
 
 const sections = [
   'Dashboard',
@@ -40,6 +40,23 @@ const parseNumberValue = (value: string) => {
   const normalized = value.replace(/\./g, '').replace(',', '.')
   const parsed = Number(normalized)
   return Number.isNaN(parsed) ? 0 : parsed
+}
+
+const parseApiErrorMessage = (error: unknown, fallback: string) => {
+  if (!(error instanceof Error) || !error.message) {
+    return fallback
+  }
+
+  try {
+    const parsed = JSON.parse(error.message)
+    if (typeof parsed?.detail === 'string') {
+      return parsed.detail
+    }
+  } catch {
+    // noop
+  }
+
+  return error.message || fallback
 }
 
 export default function App() {
@@ -107,6 +124,15 @@ export default function App() {
     is_active: true
   })
   const [formMessage, setFormMessage] = useState('')
+  const [reconciliationForm, setReconciliationForm] = useState({
+    account_id: '',
+    income_category_id: '',
+    expense_category_id: '',
+    file: null as File | null
+  })
+  const [reconciliationMessage, setReconciliationMessage] = useState('')
+  const [importedPdfTransactions, setImportedPdfTransactions] = useState<any[]>([])
+  const [isImportingPdf, setIsImportingPdf] = useState(false)
 
   const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
 
@@ -155,6 +181,30 @@ export default function App() {
       setUsers([])
     }
   }, [user?.role])
+
+  useEffect(() => {
+    if (!reconciliationForm.account_id && accounts.length) {
+      const firstActiveAccount = accounts.find((account) => account.is_active) || accounts[0]
+      if (firstActiveAccount) {
+        setReconciliationForm((current) => ({
+          ...current,
+          account_id: String(firstActiveAccount.id)
+        }))
+      }
+    }
+  }, [accounts, reconciliationForm.account_id])
+
+  useEffect(() => {
+    const incomeCategory = categories.find((category) => category.category_type === 'Receita')
+    const expenseCategory = categories.find((category) => category.category_type === 'Despesa')
+    setReconciliationForm((current) => ({
+      ...current,
+      income_category_id:
+        current.income_category_id || (incomeCategory ? String(incomeCategory.id) : ''),
+      expense_category_id:
+        current.expense_category_id || (expenseCategory ? String(expenseCategory.id) : '')
+    }))
+  }, [categories])
 
   const availableSections = useMemo(() => {
     const adminOnly = new Set<Section>(['Contas', 'Categorias', 'Usuários'])
@@ -243,6 +293,8 @@ export default function App() {
     setTransactions([])
     setTitles([])
     setUsers([])
+    setImportedPdfTransactions([])
+    setReconciliationMessage('')
     window.localStorage.removeItem('cashup-token')
   }
 
@@ -437,6 +489,43 @@ export default function App() {
       setFormMessage('Usuário criado com sucesso!')
     } catch (error) {
       setFormMessage('Não foi possível salvar o usuário.')
+    }
+  }
+
+  const handleImportPdfStatement = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setReconciliationMessage('')
+    if (!reconciliationForm.file) {
+      setReconciliationMessage('Selecione um arquivo PDF para importar.')
+      return
+    }
+    setIsImportingPdf(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', reconciliationForm.file)
+      formData.append('account_id', reconciliationForm.account_id)
+      formData.append('income_category_id', reconciliationForm.income_category_id)
+      formData.append('expense_category_id', reconciliationForm.expense_category_id)
+      const imported = await apiUpload<any[]>('/reconciliation/import/pdf', formData, {
+        headers: authHeaders
+      })
+      setImportedPdfTransactions(imported)
+      setReconciliationMessage(
+        `${imported.length} lançamentos foram importados do PDF e enviados para a aba de Lançamentos.`
+      )
+      apiFetch('/transactions', { headers: authHeaders }).then(setTransactions).catch(() => setTransactions([]))
+      apiFetch('/cashflow/summary', { headers: authHeaders }).then(setSummary).catch(() => setSummary(null))
+      setReconciliationForm((current) => ({ ...current, file: null }))
+    } catch (error) {
+      setImportedPdfTransactions([])
+      setReconciliationMessage(
+        parseApiErrorMessage(
+          error,
+          'Não foi possível importar o PDF. Confira se o layout segue o modelo Santander informado.'
+        )
+      )
+    } finally {
+      setIsImportingPdf(false)
     }
   }
 
@@ -1053,8 +1142,150 @@ export default function App() {
         )}
         {active === 'Conciliação' && (
           <SectionCard title="Conciliação Bancária">
-            <p>Importe OFX ou CSV simples em /api/reconciliation/import.</p>
-            <p>O CSV deve ter: date, description, value, external_id.</p>
+            <p>
+              Importe extratos bancários em PDF no layout Santander mostrado no template. O sistema
+              lê entradas e saídas e cria automaticamente os lançamentos financeiros.
+            </p>
+            <form onSubmit={handleImportPdfStatement} className="form-grid">
+              <label className="field">
+                Conta de destino
+                <select
+                  value={reconciliationForm.account_id}
+                  onChange={(event) =>
+                    setReconciliationForm({
+                      ...reconciliationForm,
+                      account_id: event.target.value
+                    })
+                  }
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                Categoria padrão para entradas
+                <select
+                  value={reconciliationForm.income_category_id}
+                  onChange={(event) =>
+                    setReconciliationForm({
+                      ...reconciliationForm,
+                      income_category_id: event.target.value
+                    })
+                  }
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {categories
+                    .filter((category) => category.category_type === 'Receita')
+                    .map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="field">
+                Categoria padrão para saídas
+                <select
+                  value={reconciliationForm.expense_category_id}
+                  onChange={(event) =>
+                    setReconciliationForm({
+                      ...reconciliationForm,
+                      expense_category_id: event.target.value
+                    })
+                  }
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {categories
+                    .filter((category) => category.category_type === 'Despesa')
+                    .map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="field full">
+                Extrato bancário em PDF
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(event) =>
+                    setReconciliationForm({
+                      ...reconciliationForm,
+                      file: event.target.files?.[0] || null
+                    })
+                  }
+                  required
+                />
+              </label>
+              <div className="field full helper-box">
+                <strong>Layout suportado</strong>
+                <span>
+                  Extratos Santander com cabeçalhos por data, “Saldo do dia” e movimentações com
+                  valores positivos/negativos como no template de 7 páginas enviado.
+                </span>
+              </div>
+              <button
+                type="submit"
+                className="primary"
+                disabled={
+                  isImportingPdf ||
+                  !reconciliationForm.account_id ||
+                  !reconciliationForm.income_category_id ||
+                  !reconciliationForm.expense_category_id ||
+                  !reconciliationForm.file
+                }
+              >
+                {isImportingPdf ? 'Importando PDF...' : 'Importar extrato PDF'}
+              </button>
+            </form>
+            {reconciliationMessage && <p className="form-message">{reconciliationMessage}</p>}
+            <p>
+              Após a importação, os lançamentos aparecem automaticamente na aba{' '}
+              <strong>Lançamentos</strong> e também ficam rastreados pela conciliação.
+            </p>
+            <div className="table-wrapper">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Forma</th>
+                    <th>Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importedPdfTransactions.map((transaction) => {
+                    const signed =
+                      transaction.transaction_type === 'Saída'
+                        ? -Math.abs(Number(transaction.value || 0))
+                        : Number(transaction.value || 0)
+                    return (
+                      <tr key={transaction.id}>
+                        <td>{transaction.date}</td>
+                        <td>{transaction.description}</td>
+                        <td>{transaction.payment_method}</td>
+                        <td className={signed < 0 ? 'value-negative' : ''}>
+                          {formatCurrency(signed)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {!importedPdfTransactions.length && (
+                    <tr>
+                      <td colSpan={4}>Nenhum extrato importado nesta sessão.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </SectionCard>
         )}
         {active === 'Relatórios' && (
