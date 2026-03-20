@@ -32,6 +32,10 @@ class AccountCreate(AccountBase):
     pass
 
 
+class AccountUpdate(BaseModel):
+    is_active: bool
+
+
 class AccountOut(AccountBase):
     id: int
 
