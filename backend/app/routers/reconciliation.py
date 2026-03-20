@@ -14,6 +14,33 @@ from ..schemas import ReconciliationItemOut, TransactionOut
 
 router = APIRouter(prefix="/api/reconciliation", tags=["Conciliação"])
 logger = logging.getLogger("cashup.reconciliation")
+STATEMENT_KEYWORDS = (
+    "saldo",
+    "resgate",
+    "pix",
+    "pagfor",
+    "pagamento",
+    "boleto",
+    "tarifa",
+    "contamax",
+    "internet banking",
+    "agência",
+    "agencia",
+    "conta",
+    "janeiro",
+    "fevereiro",
+    "março",
+    "marco",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
+)
 
 PORTUGUESE_MONTHS = {
     "janeiro": 1,
@@ -189,12 +216,34 @@ def _decode_pdf_text_token(token: str, glyph_map: dict[str, str]) -> str:
     return token
 
 
+def _is_meaningful_statement_text(text: str) -> bool:
+    normalized = _normalize_statement_line(text)
+    if len(normalized) < 2:
+        return False
+    printable_ratio = sum(char.isprintable() and char not in {"\x0b", "\x0c"} for char in normalized) / len(normalized)
+    if printable_ratio < 0.85:
+        return False
+    if sum(char.isalpha() for char in normalized) == 0 and sum(char.isdigit() for char in normalized) == 0:
+        return False
+    return True
+
+
+def _looks_like_statement_page(lines: list[str]) -> bool:
+    if len(lines) < 3:
+        return False
+    joined = " ".join(lines).lower()
+    has_keyword = any(keyword in joined for keyword in STATEMENT_KEYWORDS)
+    has_amount = any(pattern.search(line) for pattern in AMOUNT_PATTERNS for line in lines)
+    has_date = any(_extract_statement_date(line) for line in lines)
+    return has_keyword or (has_amount and has_date)
+
+
 def _extract_generic_text_fragments(stream: str, glyph_map: dict[str, str]) -> list[str]:
     fragments: list[str] = []
     for match in re.finditer(r"\((?:\\.|[^\\()])*\)|<[0-9A-Fa-f\s]{4,}>", stream):
         decoded = _decode_pdf_text_token(match.group(0), glyph_map)
         normalized = re.sub(r"\s+", " ", decoded).strip()
-        if normalized and any(char.isalnum() for char in normalized):
+        if _is_meaningful_statement_text(normalized):
             fragments.append(normalized)
     return fragments
 
@@ -233,11 +282,11 @@ def _extract_text_lines_from_stream(stream: str, glyph_map: dict[str, str]) -> l
                 current_parts.append(text)
         elif match.lastgroup in {"newline", "move", "setmatrix", "end"}:
             line = " ".join(part.strip() for part in current_parts if part.strip()).strip()
-            if line:
+            if _is_meaningful_statement_text(line):
                 lines.append(line)
             current_parts = []
     line = " ".join(part.strip() for part in current_parts if part.strip()).strip()
-    if line:
+    if _is_meaningful_statement_text(line):
         lines.append(line)
     return lines
 
@@ -258,14 +307,14 @@ def _extract_pdf_pages(content: bytes) -> list[list[str]]:
                 for line in _extract_text_lines_from_stream(decoded, glyph_map)
             ]
             lines = [line for line in lines if line]
-            if lines:
+            if lines and _looks_like_statement_page(lines):
                 pages.append(lines)
                 break
     if not pages:
         generic_lines: list[str] = []
         for decoded in decoded_streams:
             generic_lines.extend(_extract_generic_text_fragments(decoded, glyph_map))
-        if generic_lines:
+        if generic_lines and _looks_like_statement_page(generic_lines):
             logger.info("Falling back to generic PDF text extraction with %s fragments.", len(generic_lines))
             pages.append(generic_lines)
     logger.info("PDF extraction generated %s text page blocks and %s glyph mappings.", len(pages), len(glyph_map))
