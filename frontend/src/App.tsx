@@ -268,6 +268,22 @@ export default function App() {
     })
   }, [filteredReportTransactions])
 
+  const refreshAccounts = () =>
+    apiFetch('/accounts', { headers: authHeaders }).then(setAccounts).catch(() => setAccounts([]))
+
+  const refreshCategories = () =>
+    apiFetch('/categories', { headers: authHeaders })
+      .then(setCategories)
+      .catch(() => setCategories([]))
+
+  const refreshSummary = () =>
+    apiFetch('/cashflow/summary', { headers: authHeaders }).then(setSummary).catch(() => setSummary(null))
+
+  const refreshTransactions = () =>
+    apiFetch('/transactions', { headers: authHeaders })
+      .then(setTransactions)
+      .catch(() => setTransactions([]))
+
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault()
     setAuthError('')
@@ -367,7 +383,7 @@ export default function App() {
         is_active: true,
         bank_id: ''
       })
-      apiFetch('/accounts', { headers: authHeaders }).then(setAccounts)
+      refreshAccounts()
       setFormMessage('Conta criada com sucesso!')
     } catch (error) {
       setFormMessage('Não foi possível salvar a conta.')
@@ -388,10 +404,61 @@ export default function App() {
         })
       })
       setCategoryForm({ name: '', category_type: 'Receita', parent_id: '' })
-      apiFetch('/categories', { headers: authHeaders }).then(setCategories)
+      refreshCategories()
       setFormMessage('Categoria criada com sucesso!')
     } catch (error) {
       setFormMessage('Não foi possível salvar a categoria.')
+    }
+  }
+
+  const handleToggleAccountStatus = async (account: any) => {
+    const nextStatus = !account.is_active
+    setFormMessage('')
+    try {
+      await apiFetch(`/accounts/${account.id}`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({ is_active: nextStatus })
+      })
+      refreshAccounts()
+      setFormMessage(`Conta ${nextStatus ? 'ativada' : 'desativada'} com sucesso!`)
+    } catch (error) {
+      setFormMessage(parseApiErrorMessage(error, 'Não foi possível atualizar a conta.'))
+    }
+  }
+
+  const handleDeleteAccount = async (account: any) => {
+    const confirmed = window.confirm(`Deseja realmente excluir a conta "${account.name}"?`)
+    if (!confirmed) return
+
+    setFormMessage('')
+    try {
+      await apiFetch(`/accounts/${account.id}`, {
+        method: 'DELETE',
+        headers: authHeaders
+      })
+      refreshAccounts()
+      refreshSummary()
+      setFormMessage('Conta excluída com sucesso!')
+    } catch (error) {
+      setFormMessage(parseApiErrorMessage(error, 'Não foi possível excluir a conta.'))
+    }
+  }
+
+  const handleDeleteCategory = async (category: any) => {
+    const confirmed = window.confirm(`Deseja realmente excluir a categoria "${category.name}"?`)
+    if (!confirmed) return
+
+    setFormMessage('')
+    try {
+      await apiFetch(`/categories/${category.id}`, {
+        method: 'DELETE',
+        headers: authHeaders
+      })
+      refreshCategories()
+      setFormMessage('Categoria excluída com sucesso!')
+    } catch (error) {
+      setFormMessage(parseApiErrorMessage(error, 'Não foi possível excluir a categoria.'))
     }
   }
 
@@ -432,8 +499,8 @@ export default function App() {
         invoice_number: '',
         tax_id: ''
       })
-      apiFetch('/transactions', { headers: authHeaders }).then(setTransactions)
-      apiFetch('/cashflow/summary', { headers: authHeaders }).then(setSummary)
+      refreshTransactions()
+      refreshSummary()
       setFormMessage('Lançamento criado com sucesso!')
     } catch (error) {
       setFormMessage('Não foi possível salvar o lançamento.')
@@ -513,8 +580,8 @@ export default function App() {
       setReconciliationMessage(
         `${imported.length} lançamentos foram importados do PDF e enviados para a aba de Lançamentos.`
       )
-      apiFetch('/transactions', { headers: authHeaders }).then(setTransactions).catch(() => setTransactions([]))
-      apiFetch('/cashflow/summary', { headers: authHeaders }).then(setSummary).catch(() => setSummary(null))
+      refreshTransactions()
+      refreshSummary()
       setReconciliationForm((current) => ({ ...current, file: null }))
     } catch (error) {
       setImportedPdfTransactions([])
@@ -655,9 +722,9 @@ export default function App() {
             <SectionCard title="Resumo do Caixa">
               {summary ? (
                 <ul>
-                  <li>Saldo consolidado: R$ {summary.total_balance?.toFixed(2)}</li>
-                  <li>Entradas: R$ {summary.total_in?.toFixed(2)}</li>
-                  <li>Saídas: R$ {summary.total_out?.toFixed(2)}</li>
+                  <li>Saldo consolidado: {formatCurrency(Number(summary.total_balance || 0))}</li>
+                  <li>Entradas: {formatCurrency(Number(summary.total_in || 0))}</li>
+                  <li>Saídas: {formatCurrency(Number(summary.total_out || 0))}</li>
                 </ul>
               ) : (
                 <p>Carregue os dados para acompanhar o caixa.</p>
@@ -676,7 +743,7 @@ export default function App() {
               <ul>
                 {transactions.slice(0, 5).map((transaction) => (
                   <li key={transaction.id}>
-                    {transaction.date} - {transaction.description} - R$ {transaction.value}
+                    {transaction.date} - {transaction.description} - {formatCurrency(Number(transaction.value || 0))}
                   </li>
                 ))}
               </ul>
@@ -748,6 +815,7 @@ export default function App() {
                     <th>Tipo</th>
                     <th>Saldo inicial</th>
                     <th>Status</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -757,11 +825,29 @@ export default function App() {
                       <td>{account.account_type}</td>
                       <td>{formatCurrency(Number(account.initial_balance || 0))}</td>
                       <td>{account.is_active ? 'Ativa' : 'Inativa'}</td>
+                      <td>
+                        <div className="table-actions">
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => handleToggleAccountStatus(account)}
+                          >
+                            {account.is_active ? 'Desativar' : 'Ativar'}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost danger"
+                            onClick={() => handleDeleteAccount(account)}
+                          >
+                            Deletar
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {!accounts.length && (
                     <tr>
-                      <td colSpan={4}>Nenhuma conta cadastrada.</td>
+                      <td colSpan={5}>Nenhuma conta cadastrada.</td>
                     </tr>
                   )}
                 </tbody>
@@ -813,6 +899,7 @@ export default function App() {
                     <th>Nome</th>
                     <th>Tipo</th>
                     <th>Categoria mãe</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -823,11 +910,20 @@ export default function App() {
                       <td>
                         {categories.find((item) => item.id === category.parent_id)?.name || '—'}
                       </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="ghost danger"
+                          onClick={() => handleDeleteCategory(category)}
+                        >
+                          Deletar
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {!categories.length && (
                     <tr>
-                      <td colSpan={3}>Nenhuma categoria cadastrada.</td>
+                      <td colSpan={4}>Nenhuma categoria cadastrada.</td>
                     </tr>
                   )}
                 </tbody>
