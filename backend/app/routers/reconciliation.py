@@ -1,9 +1,11 @@
 import csv
 import io
+import importlib.util
 import logging
 import re
 import zlib
 from datetime import datetime
+from io import BytesIO
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,13 @@ from ..auth import require_role
 from ..database import get_db
 from ..models import ActionLog, ReconciliationItem, Transaction
 from ..schemas import ReconciliationItemOut, TransactionOut
+
+if importlib.util.find_spec("pypdf") is not None:
+    from pypdf import PdfReader
+elif importlib.util.find_spec("PyPDF2") is not None:
+    from PyPDF2 import PdfReader
+else:
+    PdfReader = None
 
 router = APIRouter(prefix="/api/reconciliation", tags=["Conciliação"])
 logger = logging.getLogger("cashup.reconciliation")
@@ -300,7 +309,7 @@ def _extract_text_lines_from_stream(stream: str, glyph_map: dict[str, str]) -> l
     return lines
 
 
-def _extract_pdf_pages(content: bytes) -> list[list[str]]:
+def _extract_pdf_pages_fallback(content: bytes) -> list[list[str]]:
     pages: list[list[str]] = []
     glyph_map = _build_tounicode_map(content)
     decoded_streams: list[str] = []
@@ -330,9 +339,61 @@ def _extract_pdf_pages(content: bytes) -> list[list[str]]:
     return pages
 
 
+def _extract_pdf_pages(content: bytes) -> list[list[str]]:
+    pages_read = 0
+    pages_with_text = 0
+
+    if PdfReader is not None:
+        try:
+            reader = PdfReader(BytesIO(content))
+            pages_read = len(reader.pages)
+            extracted_pages: list[list[str]] = []
+            for page_index, page in enumerate(reader.pages, start=1):
+                page_text = ""
+                try:
+                    page_text = page.extract_text(extraction_mode="layout") or ""
+                except TypeError:
+                    page_text = page.extract_text() or ""
+                except Exception as error:
+                    logger.warning("PdfReader failed on page %s: %s", page_index, error)
+                    page_text = ""
+
+                page_lines = []
+                for raw_line in page_text.splitlines():
+                    normalized = _normalize_statement_line(raw_line)
+                    if normalized:
+                        page_lines.append(normalized)
+                logger.info("PdfReader page %s extracted %s lines.", page_index, len(page_lines))
+                if page_lines:
+                    pages_with_text += 1
+                    extracted_pages.append(page_lines)
+
+            logger.info(
+                "PdfReader extracted %s pages, %s with text, line_counts=%s.",
+                pages_read,
+                pages_with_text,
+                [len(page) for page in extracted_pages],
+            )
+            if extracted_pages:
+                return extracted_pages
+        except Exception as error:
+            logger.warning("PdfReader primary extraction failed; using fallback. Error: %s", error)
+    else:
+        logger.warning("PdfReader/PyPDF2 unavailable; using fallback extraction.")
+
+    fallback_pages = _extract_pdf_pages_fallback(content)
+    logger.info(
+        "Fallback extraction returned %s pages with line_counts=%s.",
+        len(fallback_pages),
+        [len(page) for page in fallback_pages],
+    )
+    return fallback_pages
+
+
 def _normalize_statement_line(line: str) -> str:
     normalized = line.replace("−", "-").replace("–", "-").replace("—", "-")
-    normalized = normalized.replace("", " ").replace("•", " ").replace("·", " ")
+    for noisy_char in ("", "", "", "", "•", "·", "\uf0e6", "\uf131", "\uf12e", "\uf3e1"):
+        normalized = normalized.replace(noisy_char, " ")
     return re.sub(r"\s+", " ", normalized).strip(" \u00a0")
 
 
