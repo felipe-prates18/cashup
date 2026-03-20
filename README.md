@@ -173,6 +173,21 @@ O script:
 - Faz build do frontend
 - Cria serviço systemd `cashup.service` na porta **9020**
 
+### Limpeza de lançamentos direto no servidor
+
+Para remover **todos** os lançamentos diretamente no SQLite, sem passar pela aplicação, use o script standalone abaixo no servidor:
+
+```bash
+python3 /opt/cashup/deploy/clear_transactions.py --db /opt/cashup/backend/cashup.db
+```
+
+Opções úteis:
+- `--force`: executa sem confirmação interativa.
+- `--dry-run`: mostra quantos registros seriam afetados sem gravar alterações.
+- `CASHUP_DB=/caminho/do/banco.sqlite`: define o banco via variável de ambiente.
+
+O script valida a tabela `transactions` antes de executar, remove todos os registros dela, desvincula títulos liquidados (`titles.transaction_id`) e reseta vínculos de conciliação (`reconciliation_items.matched_transaction_id`).
+
 ## Exportações (CSV/PDF)
 
 O backend entrega dados estruturados via JSON. Para exportação em CSV/PDF, use o endpoint de relatórios e exporte via frontend.
