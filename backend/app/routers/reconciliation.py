@@ -30,8 +30,14 @@ PORTUGUESE_MONTHS = {
     "novembro": 11,
     "dezembro": 12,
 }
-DATE_HEADER_RE = re.compile(r"(\d{1,2}) de ([a-zç]+) de (\d{4}),", re.IGNORECASE)
-AMOUNT_RE = re.compile(r"(?P<sign>-)?\s*R\$\s*(?P<value>\d{1,3}(?:\.\d{3})*,\d{2})\s*$")
+DATE_HEADER_PATTERNS = [
+    re.compile(r"(?P<day>\d{1,2})\s+de\s+(?P<month>[a-zç]+)\s+de\s+(?P<year>\d{4})", re.IGNORECASE),
+    re.compile(r"(?P<day>\d{1,2})\s+(?P<month>[a-zç]+)\s+(?P<year>\d{4})", re.IGNORECASE),
+]
+AMOUNT_PATTERNS = [
+    re.compile(r"(?P<sign>[-−])?\s*R\$\s*(?P<value>\d{1,3}(?:\.\d{3})*,\d{2})\s*$"),
+    re.compile(r"(?P<sign>[-−])?\s*(?P<value>\d{1,3}(?:\.\d{3})*,\d{2})\s*$"),
+]
 LITERAL_STRING_RE = re.compile(r"\((?:\\.|[^\\()])*\)")
 IGNORED_LINE_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
@@ -267,7 +273,22 @@ def _extract_pdf_pages(content: bytes) -> list[list[str]]:
 
 
 def _normalize_statement_line(line: str) -> str:
-    return re.sub(r"\s+", " ", line).strip(" \u00a0")
+    normalized = line.replace("−", "-").replace("–", "-").replace("—", "-")
+    return re.sub(r"\s+", " ", normalized).strip(" \u00a0")
+
+
+def _extract_statement_date(line: str):
+    normalized = _normalize_statement_line(line.lower())
+    for pattern in DATE_HEADER_PATTERNS:
+        match = pattern.search(normalized)
+        if not match:
+            continue
+        day = int(match.group("day"))
+        month = PORTUGUESE_MONTHS.get(match.group("month").lower())
+        year = int(match.group("year"))
+        if month:
+            return datetime(year, month, day).date()
+    return None
 
 
 def _line_is_ignored(line: str) -> bool:
@@ -278,16 +299,18 @@ def _line_is_ignored(line: str) -> bool:
 
 
 def _extract_amount(line: str):
-    match = AMOUNT_RE.search(line)
-    if not match:
-        return None
-    value = float(match.group("value").replace(".", "").replace(",", "."))
-    if match.group("sign"):
-        value *= -1
-    return {
-        "value": value,
-        "text_before_amount": _normalize_statement_line(line[: match.start()]),
-    }
+    for pattern in AMOUNT_PATTERNS:
+        match = pattern.search(line)
+        if not match:
+            continue
+        value = float(match.group("value").replace(".", "").replace(",", "."))
+        if match.group("sign"):
+            value *= -1
+        return {
+            "value": value,
+            "text_before_amount": _normalize_statement_line(line[: match.start()]),
+        }
+    return None
 
 
 def _parse_santander_pdf_transactions(content: bytes, filename: str) -> list[dict]:
@@ -300,12 +323,9 @@ def _parse_santander_pdf_transactions(content: bytes, filename: str) -> list[dic
             line = _normalize_statement_line(raw_line)
             if not line:
                 continue
-            date_match = DATE_HEADER_RE.search(line.lower())
-            if date_match:
-                day = int(date_match.group(1))
-                month = PORTUGUESE_MONTHS.get(date_match.group(2).lower())
-                year = int(date_match.group(3))
-                current_date = datetime(year, month, day).date() if month else None
+            statement_date = _extract_statement_date(line)
+            if statement_date:
+                current_date = statement_date
                 pending_parts = []
                 continue
             if _line_is_ignored(line):
@@ -340,6 +360,9 @@ def _parse_santander_pdf_transactions(content: bytes, filename: str) -> list[dic
                     "external_id": f"{filename}-{page_number}-{current_date.isoformat()}-{len(transactions) + 1}",
                 }
             )
+    if not transactions:
+        preview_lines = pages[0][:25] if pages else []
+        logger.warning("No statement transactions matched parsed lines. Preview: %s", preview_lines)
     return transactions
 
 
