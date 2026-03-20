@@ -12,7 +12,13 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (!response.ok) {
     throw new Error(await response.text())
   }
-  return response.json()
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const text = await response.text()
+  return text ? (JSON.parse(text) as T) : (undefined as T)
 }
 
 export async function apiUpload<T>(
@@ -32,5 +38,11 @@ export async function apiUpload<T>(
   if (!response.ok) {
     throw new Error(await response.text())
   }
-  return response.json()
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const text = await response.text()
+  return text ? (JSON.parse(text) as T) : (undefined as T)
 }
