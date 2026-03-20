@@ -21,6 +21,11 @@ elif importlib.util.find_spec("PyPDF2") is not None:
 else:
     PdfReader = None
 
+if importlib.util.find_spec("pdfplumber") is not None:
+    import pdfplumber
+else:
+    pdfplumber = None
+
 router = APIRouter(prefix="/api/reconciliation", tags=["Conciliação"])
 logger = logging.getLogger("cashup.reconciliation")
 STATEMENT_KEYWORDS = (
@@ -340,14 +345,39 @@ def _extract_pdf_pages_fallback(content: bytes) -> list[list[str]]:
 
 
 def _extract_pdf_pages(content: bytes) -> list[list[str]]:
-    pages_read = 0
-    pages_with_text = 0
+    # --- Primary: pdfplumber (handles custom-encoded fonts like Santander's PDFs) ---
+    if pdfplumber is not None:
+        try:
+            extracted_pages: list[list[str]] = []
+            with pdfplumber.open(BytesIO(content)) as pdf:
+                for page_index, page in enumerate(pdf.pages, start=1):
+                    page_text = page.extract_text() or ""
+                    page_lines = []
+                    for raw_line in page_text.splitlines():
+                        normalized = _normalize_statement_line(raw_line)
+                        if normalized:
+                            page_lines.append(normalized)
+                    logger.info("pdfplumber page %s extracted %s lines.", page_index, len(page_lines))
+                    if page_lines:
+                        extracted_pages.append(page_lines)
+            logger.info(
+                "pdfplumber extracted %s pages with text, line_counts=%s.",
+                len(extracted_pages),
+                [len(p) for p in extracted_pages],
+            )
+            if extracted_pages:
+                return extracted_pages
+            logger.warning("pdfplumber returned 0 text pages; trying PyPDF fallback.")
+        except Exception as error:
+            logger.warning("pdfplumber extraction failed; trying PyPDF fallback. Error: %s", error)
+    else:
+        logger.warning("pdfplumber unavailable; trying PyPDF fallback.")
 
+    # --- Secondary: pypdf / PyPDF2 ---
     if PdfReader is not None:
         try:
             reader = PdfReader(BytesIO(content))
-            pages_read = len(reader.pages)
-            extracted_pages: list[list[str]] = []
+            extracted_pages = []
             for page_index, page in enumerate(reader.pages, start=1):
                 page_text = ""
                 try:
@@ -356,8 +386,6 @@ def _extract_pdf_pages(content: bytes) -> list[list[str]]:
                     page_text = page.extract_text() or ""
                 except Exception as error:
                     logger.warning("PdfReader failed on page %s: %s", page_index, error)
-                    page_text = ""
-
                 page_lines = []
                 for raw_line in page_text.splitlines():
                     normalized = _normalize_statement_line(raw_line)
@@ -365,22 +393,21 @@ def _extract_pdf_pages(content: bytes) -> list[list[str]]:
                         page_lines.append(normalized)
                 logger.info("PdfReader page %s extracted %s lines.", page_index, len(page_lines))
                 if page_lines:
-                    pages_with_text += 1
                     extracted_pages.append(page_lines)
-
             logger.info(
-                "PdfReader extracted %s pages, %s with text, line_counts=%s.",
-                pages_read,
-                pages_with_text,
-                [len(page) for page in extracted_pages],
+                "PdfReader extracted %s pages with text, line_counts=%s.",
+                len(extracted_pages),
+                [len(p) for p in extracted_pages],
             )
             if extracted_pages:
                 return extracted_pages
+            logger.warning("PdfReader returned 0 text pages; using raw fallback.")
         except Exception as error:
-            logger.warning("PdfReader primary extraction failed; using fallback. Error: %s", error)
+            logger.warning("PdfReader extraction failed; using raw fallback. Error: %s", error)
     else:
-        logger.warning("PdfReader/PyPDF2 unavailable; using fallback extraction.")
+        logger.warning("PdfReader/PyPDF2 unavailable; using raw fallback extraction.")
 
+    # --- Last resort: raw stream parser ---
     fallback_pages = _extract_pdf_pages_fallback(content)
     logger.info(
         "Fallback extraction returned %s pages with line_counts=%s.",
