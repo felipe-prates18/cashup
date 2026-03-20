@@ -42,6 +42,23 @@ const parseNumberValue = (value: string) => {
   return Number.isNaN(parsed) ? 0 : parsed
 }
 
+const parseApiErrorMessage = (error: unknown, fallback: string) => {
+  if (!(error instanceof Error) || !error.message) {
+    return fallback
+  }
+
+  try {
+    const parsed = JSON.parse(error.message)
+    if (typeof parsed?.detail === 'string') {
+      return parsed.detail
+    }
+  } catch {
+    // noop
+  }
+
+  return error.message || fallback
+}
+
 export default function App() {
   const [active, setActive] = useState<Section>('Dashboard')
   const [token, setToken] = useState('')
@@ -501,7 +518,12 @@ export default function App() {
       setReconciliationForm((current) => ({ ...current, file: null }))
     } catch (error) {
       setImportedPdfTransactions([])
-      setReconciliationMessage('Não foi possível importar o PDF. Confira se o layout segue o modelo Santander informado.')
+      setReconciliationMessage(
+        parseApiErrorMessage(
+          error,
+          'Não foi possível importar o PDF. Confira se o layout segue o modelo Santander informado.'
+        )
+      )
     } finally {
       setIsImportingPdf(false)
     }
