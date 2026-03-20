@@ -261,6 +261,18 @@ export default function App() {
   }, [availableSections, active])
 
 
+  const activeAccounts = useMemo(() => {
+    return accounts.filter((account) => account.is_active)
+  }, [accounts])
+
+  const incomeCategories = useMemo(() => {
+    return categories.filter((category) => category.category_type === 'Receita')
+  }, [categories])
+
+  const expenseCategories = useMemo(() => {
+    return categories.filter((category) => category.category_type === 'Despesa')
+  }, [categories])
+
   const transactionBalances = useMemo(() => {
     let running = 0
     return filteredTransactions.map((transaction) => {
