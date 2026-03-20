@@ -108,13 +108,16 @@ def _decode_pdf_literal(value: str) -> str:
             buffer.append(simple_escapes[escaped])
             index += 1
             continue
-        if escaped.isdigit():
+        if escaped in "01234567":
             octal = escaped
             for _ in range(2):
-                if index + 1 < len(value) and value[index + 1].isdigit():
+                if index + 1 < len(value) and value[index + 1] in "01234567":
                     index += 1
                     octal += value[index]
-            buffer.append(chr(int(octal, 8)))
+            try:
+                buffer.append(chr(int(octal, 8)))
+            except ValueError:
+                buffer.append(octal)
             index += 1
             continue
         buffer.append(escaped)
