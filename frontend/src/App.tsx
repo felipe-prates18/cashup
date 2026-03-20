@@ -247,11 +247,20 @@ export default function App() {
   }, [incomeCategories, expenseCategories])
 
   const availableSections = useMemo(() => {
-    const adminOnly = new Set<Section>(['Contas', 'Categorias', 'Usuários'])
+    const adminOnly = new Set<Section>(['Usuários'])
+    const financeRestricted = new Set<Section>(['Categorias'])
+
     if (user?.role === 'admin') {
       return sections
     }
-    return sections.filter((section) => !adminOnly.has(section))
+
+    if (user?.role === 'finance') {
+      return sections.filter((section) => !adminOnly.has(section) && !financeRestricted.has(section))
+    }
+
+    return sections.filter(
+      (section) => !adminOnly.has(section) && section !== 'Contas' && !financeRestricted.has(section)
+    )
   }, [user?.role])
 
   useEffect(() => {
@@ -260,18 +269,6 @@ export default function App() {
     }
   }, [availableSections, active])
 
-
-  const activeAccounts = useMemo(() => {
-    return accounts.filter((account) => account.is_active)
-  }, [accounts])
-
-  const incomeCategories = useMemo(() => {
-    return categories.filter((category) => category.category_type === 'Receita')
-  }, [categories])
-
-  const expenseCategories = useMemo(() => {
-    return categories.filter((category) => category.category_type === 'Despesa')
-  }, [categories])
 
   const transactionBalances = useMemo(() => {
     let running = 0
