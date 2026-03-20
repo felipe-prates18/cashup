@@ -183,8 +183,8 @@ export default function App() {
   }, [user?.role])
 
   useEffect(() => {
-    if (!reconciliationForm.account_id && accounts.length) {
-      const firstActiveAccount = accounts.find((account) => account.is_active) || accounts[0]
+    if (!reconciliationForm.account_id && activeAccounts.length) {
+      const firstActiveAccount = activeAccounts[0]
       if (firstActiveAccount) {
         setReconciliationForm((current) => ({
           ...current,
@@ -192,11 +192,11 @@ export default function App() {
         }))
       }
     }
-  }, [accounts, reconciliationForm.account_id])
+  }, [activeAccounts, reconciliationForm.account_id])
 
   useEffect(() => {
-    const incomeCategory = categories.find((category) => category.category_type === 'Receita')
-    const expenseCategory = categories.find((category) => category.category_type === 'Despesa')
+    const incomeCategory = incomeCategories[0]
+    const expenseCategory = expenseCategories[0]
     setReconciliationForm((current) => ({
       ...current,
       income_category_id:
@@ -204,7 +204,7 @@ export default function App() {
       expense_category_id:
         current.expense_category_id || (expenseCategory ? String(expenseCategory.id) : '')
     }))
-  }, [categories])
+  }, [incomeCategories, expenseCategories])
 
   const availableSections = useMemo(() => {
     const adminOnly = new Set<Section>(['Contas', 'Categorias', 'Usuários'])
@@ -247,6 +247,18 @@ export default function App() {
       return true
     })
   }, [sortedTransactions, reportRange])
+
+  const activeAccounts = useMemo(() => {
+    return accounts.filter((account) => account.is_active)
+  }, [accounts])
+
+  const incomeCategories = useMemo(() => {
+    return categories.filter((category) => category.category_type === 'Receita')
+  }, [categories])
+
+  const expenseCategories = useMemo(() => {
+    return categories.filter((category) => category.category_type === 'Despesa')
+  }, [categories])
 
   const transactionBalances = useMemo(() => {
     let running = 0
@@ -991,7 +1003,7 @@ export default function App() {
                   required
                 >
                   <option value="">Selecione</option>
-                  {accounts.map((account) => (
+                  {activeAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
                     </option>
@@ -1178,7 +1190,7 @@ export default function App() {
                   onChange={(event) => setTitleForm({ ...titleForm, account_id: event.target.value })}
                 >
                   <option value="">Selecione</option>
-                  {accounts.map((account) => (
+                  {activeAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
                     </option>
@@ -1256,7 +1268,7 @@ export default function App() {
                   required
                 >
                   <option value="">Selecione</option>
-                  {accounts.map((account) => (
+                  {activeAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
                     </option>
@@ -1276,9 +1288,7 @@ export default function App() {
                   required
                 >
                   <option value="">Selecione</option>
-                  {categories
-                    .filter((category) => category.category_type === 'Receita')
-                    .map((category) => (
+                  {incomeCategories.map((category) => (
                       <option key={category.id} value={category.id}>
                         {category.name}
                       </option>
@@ -1298,9 +1308,7 @@ export default function App() {
                   required
                 >
                   <option value="">Selecione</option>
-                  {categories
-                    .filter((category) => category.category_type === 'Despesa')
-                    .map((category) => (
+                  {expenseCategories.map((category) => (
                       <option key={category.id} value={category.id}>
                         {category.name}
                       </option>
