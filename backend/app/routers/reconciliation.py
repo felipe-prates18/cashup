@@ -41,6 +41,24 @@ STATEMENT_KEYWORDS = (
     "novembro",
     "dezembro",
 )
+NOISE_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"^internet banking empresarial$",
+        r"^ag[êe]ncia:?\s*\d+",
+        r"^conta:?\s*\d+",
+        r"^real precatorio",
+        r"^extrato$",
+        r"^p[aá]gina \d+",
+        r"^sac",
+        r"^ouvidoria",
+        r"^central de atendimento",
+        r"^atendimento empresarial",
+        r"^\d{4}\s*\d{4}\s*\d{4}",
+        r"^www\.",
+        r"^0800",
+    )
+]
 
 PORTUGUESE_MONTHS = {
     "janeiro": 1,
@@ -66,19 +84,7 @@ AMOUNT_PATTERNS = [
     re.compile(r"(?P<sign>[-−])?\s*(?P<value>\d{1,3}(?:\.\d{3})*,\d{2})\s*$"),
 ]
 LITERAL_STRING_RE = re.compile(r"\((?:\\.|[^\\()])*\)")
-IGNORED_LINE_PATTERNS = [
-    re.compile(pattern, re.IGNORECASE)
-    for pattern in (
-        r"^internet banking empresarial$",
-        r"^agência:\s*\d+",
-        r"^agencia:\s*\d+",
-        r"^conta:\s*\d+",
-        r"^real precatorio",
-        r"^saldo do dia$",
-        r"^extrato",
-        r"^página \d+",
-    )
-]
+SHORT_DATE_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
 
 
 def _decode_pdf_literal(value: str) -> str:
@@ -326,6 +332,7 @@ def _extract_pdf_pages(content: bytes) -> list[list[str]]:
 
 def _normalize_statement_line(line: str) -> str:
     normalized = line.replace("−", "-").replace("–", "-").replace("—", "-")
+    normalized = normalized.replace("", " ").replace("•", " ").replace("·", " ")
     return re.sub(r"\s+", " ", normalized).strip(" \u00a0")
 
 
@@ -339,7 +346,10 @@ def _extract_statement_date(line: str):
         month = PORTUGUESE_MONTHS.get(match.group("month").lower())
         year = int(match.group("year"))
         if month:
-            return datetime(year, month, day).date()
+            try:
+                return datetime(year, month, day).date()
+            except ValueError:
+                continue
     return None
 
 
@@ -347,7 +357,67 @@ def _line_is_ignored(line: str) -> bool:
     normalized = _normalize_statement_line(line)
     if not normalized:
         return True
-    return any(pattern.search(normalized) for pattern in IGNORED_LINE_PATTERNS)
+    return any(pattern.search(normalized) for pattern in NOISE_PATTERNS)
+
+
+def _is_balance_line(line: str) -> bool:
+    return "saldo do dia" in _normalize_statement_line(line).lower()
+
+
+def _is_short_date_line(line: str) -> bool:
+    return bool(SHORT_DATE_RE.fullmatch(_normalize_statement_line(line)))
+
+
+def _split_glued_date_lines(line: str) -> list[str]:
+    normalized = _normalize_statement_line(line)
+    if not normalized:
+        return []
+    split_pattern = re.compile(
+        r"(?<!^)(?<![\d/])(?=(\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4}(?:,\s*[a-z-]+)?))",
+        re.IGNORECASE,
+    )
+    pieces = [piece.strip() for piece in split_pattern.split(normalized) if piece and piece.strip()]
+    return pieces or [normalized]
+
+
+def _prepare_statement_lines(lines: list[str]) -> list[str]:
+    prepared: list[str] = []
+    for raw_line in lines:
+        for piece in _split_glued_date_lines(raw_line):
+            normalized = _normalize_statement_line(piece)
+            if not normalized or _line_is_ignored(normalized):
+                continue
+            prepared.append(normalized)
+    return prepared
+
+
+def _extract_page_dates(lines: list[str]) -> list[datetime.date]:
+    dates: list[datetime.date] = []
+    seen = set()
+    for line in lines:
+        statement_date = _extract_statement_date(line)
+        if statement_date and statement_date not in seen:
+            dates.append(statement_date)
+            seen.add(statement_date)
+    return dates
+
+
+def _clean_transaction_parts(parts: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    for part in parts:
+        normalized = _normalize_statement_line(part)
+        if not normalized:
+            continue
+        if _extract_statement_date(normalized):
+            continue
+        if _is_short_date_line(normalized):
+            continue
+        if _is_balance_line(normalized):
+            continue
+        if _line_is_ignored(normalized):
+            continue
+        cleaned.append(normalized)
+    return cleaned
 
 
 def _extract_amount(line: str):
@@ -368,38 +438,57 @@ def _extract_amount(line: str):
 def _parse_santander_pdf_transactions(content: bytes, filename: str) -> list[dict]:
     pages = _extract_pdf_pages(content)
     transactions = []
+    seen_transactions = set()
     for page_number, lines in enumerate(pages, start=1):
-        current_date = None
+        prepared_lines = _prepare_statement_lines(lines)
+        page_dates = _extract_page_dates(prepared_lines)
+        if not page_dates:
+            continue
+        current_date_index = 0
+        current_date = page_dates[current_date_index]
         pending_parts: list[str] = []
-        for raw_line in lines:
-            line = _normalize_statement_line(raw_line)
+        committed_for_current_date = False
+        for line in prepared_lines:
             if not line:
                 continue
-            statement_date = _extract_statement_date(line)
-            if statement_date:
-                current_date = statement_date
+            if _extract_statement_date(line):
+                continue
+            if _is_balance_line(line):
                 pending_parts = []
+                if committed_for_current_date and current_date_index + 1 < len(page_dates):
+                    current_date_index += 1
+                    current_date = page_dates[current_date_index]
+                    committed_for_current_date = False
                 continue
             if _line_is_ignored(line):
-                pending_parts = []
-                continue
-            if current_date is None:
                 continue
             amount_data = _extract_amount(line)
             if not amount_data:
+                if _is_short_date_line(line):
+                    continue
                 pending_parts.append(line)
                 continue
             parts = [part for part in pending_parts if part]
             if amount_data["text_before_amount"]:
                 parts.append(amount_data["text_before_amount"])
             pending_parts = []
-            if not parts:
+            parts = _clean_transaction_parts(parts)
+            if not parts or current_date is None:
                 continue
             description = parts[0]
             detail = " · ".join(parts[1:]) if len(parts) > 1 else None
-            if description.lower().startswith("saldo do dia"):
-                continue
             value = amount_data["value"]
+            transaction_type = "Saída" if value < 0 else "Entrada"
+            dedupe_key = (
+                current_date.isoformat(),
+                description.lower(),
+                detail.lower() if detail else "",
+                round(value, 2),
+                transaction_type,
+            )
+            if dedupe_key in seen_transactions:
+                continue
+            seen_transactions.add(dedupe_key)
             transactions.append(
                 {
                     "date": current_date,
@@ -407,11 +496,12 @@ def _parse_santander_pdf_transactions(content: bytes, filename: str) -> list[dic
                     "detail": detail,
                     "value": abs(value),
                     "signed_value": value,
-                    "transaction_type": "Saída" if value < 0 else "Entrada",
+                    "transaction_type": transaction_type,
                     "source_page": page_number,
                     "external_id": f"{filename}-{page_number}-{current_date.isoformat()}-{len(transactions) + 1}",
                 }
             )
+            committed_for_current_date = True
     if not transactions:
         preview_lines = pages[0][:25] if pages else []
         logger.warning("No statement transactions matched parsed lines. Preview: %s", preview_lines)
