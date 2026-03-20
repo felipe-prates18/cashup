@@ -6,7 +6,7 @@ SERVICE_FILE="/etc/systemd/system/cashup.service"
 BACKEND_DIR=""
 FRONTEND_DIR=""
 SKIP_SYSTEMD=0
-CASHUP_PORT="${CASHUP_PORT:-443}"
+CASHUP_PORT="${CASHUP_PORT:-80}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -128,5 +128,9 @@ systemctl enable cashup.service
 systemctl restart cashup.service
 systemctl --no-pager --full status cashup.service
 
-log "CashUp disponível em http://localhost:$CASHUP_PORT"
+if [[ "$CASHUP_PORT" == "80" ]]; then
+  log "CashUp disponível em http://localhost"
+else
+  log "CashUp disponível em http://localhost:$CASHUP_PORT"
+fi
 log "Usuário inicial: admin@cashup.local / admin"

@@ -8,7 +8,7 @@ Aplicação web completa para controle financeiro interno com foco em fluxo de c
 - **Banco**: SQLite (padrão), com script SQL disponível
 - **Frontend**: React (Vite)
 - **Autenticação**: JWT com níveis de permissão (admin, finance, viewer)
-- **Porta padrão**: **443**
+- **Porta padrão**: **80 (HTTP)**
 
 ## Modelagem de Dados (ERD)
 
@@ -146,7 +146,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/init_db.py
-uvicorn app.main:app --host 0.0.0.0 --port 443
+sudo .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 80
 ```
 
 ### Frontend
@@ -156,7 +156,7 @@ npm install
 npm run build
 ```
 
-Após o build, o backend irá servir o frontend em `http://localhost:443`.
+Após o build, o backend irá servir o frontend em `http://localhost`.
 
 ## Deploy Automatizado (Ubuntu 24.04)
 
@@ -168,12 +168,14 @@ sudo bash deploy/setup.sh
 
 Se precisar sobrescrever a porta padrão, execute com `CASHUP_PORT=<porta> sudo bash deploy/setup.sh`.
 
+> Observação: a porta 80 exige privilégios elevados no Linux; por isso o exemplo local usa `sudo`.
+
 O script:
 - Cria virtualenv
 - Instala dependências
 - Inicializa o banco
 - Faz build do frontend
-- Cria serviço systemd `cashup.service` na porta **443** (ou na porta definida em `CASHUP_PORT`)
+- Cria serviço systemd `cashup.service` na porta **80** (ou na porta definida em `CASHUP_PORT`)
 
 ### Limpeza de lançamentos direto no servidor
 
