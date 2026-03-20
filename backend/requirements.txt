@@ -9,3 +9,4 @@ bcrypt==3.2.2
 python-jose==3.3.0
 aiofiles==24.1.0
 pypdf==5.1.0
+pdfplumber
